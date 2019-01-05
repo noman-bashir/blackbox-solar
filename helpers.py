@@ -10,164 +10,137 @@ from importlib import reload
 import datetime
 from sklearn import metrics
 
-def parameter_K(clear_sky, gen_data, z, surface_tilt, surface_azimuth, azimuth, zenith):
+def parameter_K(k, surface_tilt, surface_azimuth, data):
+    print(data['zenith']*data['zenith'])
+    # print(math.cos(data['zenith']))
 
-    k = z
+    # solar_data = clear_sky * k * ( math.cos(math.radians(90)-zenith) * math.sin(surface_tilt) * math.cos(surface_azimuth - azimuth) + math.sin(math.radians(90)-zenith) * math.cos(surface_tilt))
 
-    gen_data = gen_data * 1000
+    # solar_data = 0 if solar_data < 1 else solar_data
 
-    solar_data = clear_sky * k * ( math.cos(1.5708-zenith) * math.sin(surface_tilt) * math.cos(surface_azimuth - azimuth) + math.sin(1.5708-zenith) * math.cos(surface_tilt))
-
-    solar_data = 0 if solar_data < 1 else solar_data
-    # defining error as 1% of generation data
-    if (solar_data > 0): 
-        while (abs(solar_data-gen_data) > 0.01 * gen_data):
-            if (solar_data > gen_data):
-                k = k/2
-                solar_data = clear_sky * k * ( math.cos(1.5708-zenith) * math.sin(surface_tilt) * math.cos(surface_azimuth - azimuth) + math.sin(1.5708-zenith) * math.cos(surface_tilt))
-            else:
-                k = k+0.01
-                solar_data = clear_sky * k * ( math.cos(1.5708-zenith) * math.sin(surface_tilt) * math.cos(surface_azimuth - azimuth) + math.sin(1.5708-zenith) * math.cos(surface_tilt))
-    else:
-        k = 0
-
-    print(k, solar_data, gen_data)
+    # # defining error as 1% of generation data
+    # if (solar_data > 0): 
+    #     while (abs(solar_data-gen_data) > 0.001 * gen_data):
+    #         if (solar_data > gen_data):
+    #             k = k/2
+    #             solar_data = clear_sky * k * ( math.cos(math.radians(90)-zenith) * math.sin(surface_tilt) * math.cos(surface_azimuth - azimuth) + math.sin(math.radians(90)-zenith) * math.cos(surface_tilt))
+    #         else:
+    #             k = k + 0.01
+    #             solar_data = clear_sky * k * ( math.cos(math.radians(90)-zenith) * math.sin(surface_tilt) * math.cos(surface_azimuth - azimuth) + math.sin(math.radians(90)-zenith) * math.cos(surface_tilt))
+    #     while (solar_data < gen_data):
+    #         k = k + 0.0001
+    #         solar_data = clear_sky * k * ( math.cos(math.radians(90)-zenith) * math.sin(surface_tilt) * math.cos(surface_azimuth - azimuth) + math.sin(math.radians(90)-zenith) * math.cos(surface_tilt))
+    # else:
+    #     k = 100
 
     return k
 
 def parameter_azimuth(clear_sky, gen_data, new_k, surface_tilt, surface_azimuth, azimuth, zenith):
 
-    solar_data = 0
-    perfect_surface_azimuth = surface_azimuth
-    new_surface_azimuth = surface_azimuth
-    new_solar_data = 0
+    return_val = surface_azimuth
+    df = pd.DataFrame(columns=['azimuth', 'solar_data', 'gen_data', 'diff'])
+
+    gen_data = gen_data * 1000
 
     #vary the value of azimuth from 0 degrees to 360 degrees to obtain the one which gives tightest bound on data
-    for i in np.arange(0, 6.28319, 0.08727):
+    for i in np.arange(0, 2*math.pi, math.radians(1)):
         
         #copy of older azimuth and its data values
         surface_azimuth = i
-        old_solar_data = new_solar_data
         
-        old_surface_azimuth = new_surface_azimuth
+        solar_data = clear_sky * new_k * (math.cos(math.radians(90)-zenith) * math.sin(surface_tilt) * math.cos(surface_azimuth - azimuth) + math.sin(math.radians(90)-zenith) * math.cos(surface_tilt))
         
-        solar_data = clear_sky * new_k * ( math.cos(1.5708-zenith) * math.sin(surface_tilt) * math.cos(surface_azimuth - azimuth) + math.sin(1.5708-zenith) * math.cos(surface_tilt))
-        
-        #copy of new azimuth and its data values
-        new_solar_data = solar_data
-        new_surface_azimuth = surface_azimuth
+        df = df.append({'azimuth': i, 'solar_data': solar_data, 'gen_data': gen_data, 'diff':(solar_data-gen_data) }, ignore_index=True)
 
-        #discard the values if it is outside the bound i.e above clear sky and solar generation
-        if (solar_data < gen_data):
-            continue
-        elif (solar_data > clear_sky):
-            continue
-        else:
-            #inside the bound obtain the one which gives tightest bound on data
-            if(new_solar_data < old_solar_data):
-                perfect_surface_azimuth = old_surface_azimuth
-            else:
-                perfect_surface_azimuth = new_surface_azimuth
-            
-    return perfect_surface_azimuth
+    if clear_sky > 0:            
+        try:
+            df = df.loc[df['solar_data'] >= df['gen_data']]
+            min_val_row = df.ix[df['solar_data'].idxmin()]
+            return_val = min_val_row['azimuth']
+        except ValueError as e:
+            pass
+
+    return return_val
+    # min_val_row['azimuth']
+
 
 def parameter_tilt(clear_sky, gen_data,new_k,surface_tilt, surface_azimuth, azimuth, zenith):
-
-    solar_data = 0
-    perfect_surface_tilt = surface_tilt
-    new_surface_tilt = surface_tilt
-    new_solar_data = 0
     
-    #vary the value of tilt from 0 degrees to 90 degrees to obtain the one which gives tightest bound on data
-    for i in np.arange(0, 1.5708, 0.08727):
+    df = pd.DataFrame(columns=['tilt', 'diff'])
+
+    gen_data = gen_data * 1000
+
+    #vary the value of azimuth from 0 degrees to 360 degrees to obtain the one which gives tightest bound on data
+    for i in np.arange(0, 2*math.pi, math.radians(1)):
+
         
-        surface_azimuth = i
+        #copy of older azimuth and its data values
+        surface_tilt = i
         
-        #copy of older tilt and its data values
-        old_solar_data = new_solar_data
-        
-        old_surface_tilt = new_surface_tilt
-        
-        solar_data = clear_sky * new_k * ( math.cos(1.5708-zenith) * math.sin(surface_tilt) * math.cos(surface_azimuth - azimuth) + math.sin(1.5708-zenith) * math.cos(surface_tilt))
-        
-        #copy of new tilt and its data values
-        new_solar_data = solar_data
-        new_surface_tilt = surface_tilt
+        solar_data = clear_sky * new_k * (math.cos(math.radians(90)-zenith) * math.sin(surface_tilt) * math.cos(surface_azimuth - azimuth) + math.sin(math.radians(90)-zenith) * math.cos(surface_tilt))
 
-        #discard the values if it is outside the bound i.e above clear sky and solar generation
-        if (solar_data < gen_data):
-            continue
-        elif (solar_data > clear_sky):
-            continue
-        else:
-            #inside the bound obtain the one which gives tightest bound on data
-            if(new_solar_data < old_solar_data):
-                perfect_surface_tilt = new_surface_tilt
-            else:
-                perfect_surface_tilt = old_surface_tilt
-            
-    return perfect_surface_tilt
+        df = df.append({'tilt': i, 'diff': abs(solar_data-gen_data) }, ignore_index=True)
 
-def parameters(k_init, surface_azimuth_init, surface_tilt_init, latitude, longitude, time_clearsky_gen):
-    gen_data = []
-    data = []
-    rmse = []
-    k_list = []
-    sa_list = []
-    st_list = []
-    clean_data = []
+    min_val_row = df.ix[df['diff'].idxmin()]
 
-    for _ , row in time_clearsky_gen.iterrows():
+    return min_val_row['tilt']
 
-        # getting data for that time and location
-        solar_position_data = pvlib.solarposition.get_solarposition(row['time'], latitude, longitude)
 
-        #conerting the azimuth and zenith angles from degrees to radians
-        azimuth = math.radians(solar_position_data['azimuth'])
-        zenith = math.radians(solar_position_data['zenith'])
 
-        # obtain all the solar generation values in a list
-        gen_data.append(row['Generation [kW]'])
+def parameters(k_init, surface_azimuth_init, surface_tilt_init, data):
 
-        #call the parameter_k function to get the optimised value of k
-        optimised_k = parameter_K(row['ghi'], row['Generation [kW]'], k_init, surface_tilt_init, surface_azimuth_init, azimuth, zenith)
-        k_list.append(optimised_k)
+    #call the parameter_k function to get the optimised value of k
+    optimised_k = parameter_K(k_init, surface_tilt_init, surface_azimuth_init, data)
+
+    # para = pd.DataFrame(columns=['k', 'surface_azimuth', 'surface_tilt', 'sun_azimuth', 'sun_zenith'])
+
+    # for _ , row in time_clearsky_gen.iterrows():
+
+    #     # getting data for that time and location
+    #     solar_position_data = pvlib.solarposition.get_solarposition(row['time'], latitude, longitude)
+
+    #     #conerting the azimuth and zenith angles from degrees to radians
+    #     azimuth = math.radians(solar_position_data['azimuth'])
+    #     zenith = math.radians(solar_position_data['zenith'])
+
+    #     #call the parameter_k function to get the optimised value of k
+    #     optimised_k = parameter_K(row['ghi'], row['Generation [kW]'], k_init, surface_tilt_init, surface_azimuth_init, azimuth, zenith)
        
-        #call the parameter_azimuth function to get the optimised value of surface azimuth(orientaion)
-        optimised_surface_azimuth = parameter_azimuth(row['ghi'], row['Generation [kW]'], optimised_k, surface_tilt_init, surface_azimuth_init, azimuth, zenith)
-        sa_list.append(optimised_surface_azimuth)
+    #     #call the parameter_azimuth function to get the optimised value of surface azimuth(orientaion)
+    #     optimised_surface_azimuth = parameter_azimuth(row['ghi'], row['Generation [kW]'], optimised_k, surface_tilt_init, surface_azimuth_init, azimuth, zenith)
 
-        #call the parameter_tilt function to get the optimised value of surface tilt
-        optimised_surface_tilt = parameter_tilt(row['ghi'], row['Generation [kW]'], optimised_k, surface_tilt_init, optimised_surface_azimuth, azimuth, zenith)
-        st_list.append(optimised_surface_tilt)
+    #     #call the parameter_tilt function to get the optimised value of surface tilt
+    #     optimised_surface_tilt = parameter_tilt(row['ghi'], row['Generation [kW]'], optimised_k, surface_tilt_init, optimised_surface_azimuth, azimuth, zenith)
 
-        #calculate the solar data for the optimised values of k, orientaion and tilt
-        solar_data = row['ghi'] * optimised_k * ( math.cos(1.5708-zenith) * math.sin(optimised_surface_tilt) * math.cos(optimised_surface_azimuth - azimuth) + math.sin(1.5708-zenith) * math.cos(optimised_surface_tilt))
-        data.append(solar_data)
+    #     para = para.append({
+    #         'k': optimised_k, 
+    #         'surface_azimuth': optimised_surface_azimuth, 
+    #         'surface_tilt': optimised_surface_tilt, 
+    #         'sun_azimuth': azimuth, 
+    #         'sun_zenith': zenith
+    #         }, ignore_index=True)
 
-        #discard the values if it is 0 as they will affect the rmse value
-        if (solar_data != 0 and solar_data != -0.0):
-            clean_data.append(solar_data)
+    # rmse_values = pd.DataFrame(columns=['index', 'rmse_data'])   
+    
+    # for index , p in para.iterrows():
+
+    #     solar_curve = pd.DataFrame(columns=['solar_data', 'actual_gen'])
+
+    #     for _ , tcg in time_clearsky_gen.iterrows():
+    #         solar_data = tcg['ghi'] * p['k'] * (math.cos(math.radians(90)-p['sun_zenith']) * math.sin(p['surface_tilt']) * math.cos(p['surface_azimuth'] - p['sun_azimuth']) + math.sin(math.radians(90)-p['sun_zenith']) * math.cos(p['surface_tilt']))
+    #         if solar_data > 0:
+    #             solar_curve = solar_curve.append({'solar_data':solar_data, 'actual_gen':tcg['Generation [kW]']*1000}, ignore_index= True)
         
-        #calculate the rmse for non zero values    
-        rmse_data = np.sqrt(metrics.mean_squared_error(gen_data, data))
-        rmse.append(rmse_data)
-        # print(optimised_k, solar_data, row['Generation [kW]']*1000)
-     
-    clean_data_length = len(clean_data) - 1
-
-    data_clean_first_index = data.index(clean_data[0])
-    data_clean_last_index = data.index(clean_data[clean_data_length])
+    #     if (len(solar_curve)):
+    #         rmse_data = np.sqrt(metrics.mean_squared_error(solar_curve['actual_gen'], solar_curve['solar_data']))
+    #         rmse_values = rmse_values.append({'index':index, 'rmse_data':rmse_data}, ignore_index= True)
+        
     
-    minimum_rmse = min(rmse[data_clean_first_index : data_clean_last_index])
-    index_rmse = rmse.index(minimum_rmse)
-
-    #obtain the values of k, orientaion and tilt values for which we get minimum rmse
-    next_k = k_list[index_rmse]
-    next_surface_azimuth = sa_list[index_rmse]
-    next_surface_tilt = st_list[index_rmse]
+    # min_val_row = rmse_values.ix[rmse_values['rmse_data'].idxmin()]
+    # final_parameters = para.ix[min_val_row['index']]
     
-    return (next_k, next_surface_azimuth, next_surface_tilt)
+    # return (final_parameters['k'], final_parameters['surface_azimuth'], final_parameters['surface_tilt'])
+    return 0
 
 
 
